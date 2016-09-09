@@ -34,22 +34,26 @@ class IPsec:
         temp = hashlib.sha256(temp.encode('utf-8')).hexdigest()
         temp = str(temp)
         enc = temp[0:8]
-        spi = int(temp[8:10], 16)
+        spi = temp[8:16]
         return enc, spi
 
     def generate_script(self):
         self.script += "#!/bin/bash\n"
+        enc, spi = self._generate_sec_spi(self.outer_ip)
+        self.script += "#Self\n"
+        self.script += "ip xfrm state add dst %s proto esp spi 0x%s enc blowfish 0x%s\n" \
+                       % (self.inner_ip, spi, enc)
+        self.script += "\n"
         for con in self.connections:
+            self.script += "#%s\n" % con
             remote_server = self.servers[con]
             enc, spi = self._generate_sec_spi(remote_server['ip'])
-            self.script += "ip xfrm state add src %s dst %s proto esp spi %s enc blowfish %s\n" \
+            self.script += "ip xfrm state add src %s dst %s proto esp spi 0x%s enc blowfish 0x%s\n" \
                            % (self.inner_ip, remote_server['ip'], spi, enc)
-            self.script += "ip xfrm policy add src %s dst %s dir out tmpl proto esp spi %s\n" \
+            self.script += "ip xfrm policy add src %s dst %s dir out tmpl proto esp spi 0x%s\n" \
                            % (self.inner_ip, remote_server['ip'], spi)
             enc, spi = self._generate_sec_spi(self.outer_ip)
-            self.script += "ip xfrm state add src %s dst %s proto esp spi %s enc blowfish %s\n" \
-                           % (remote_server['ip'], self.inner_ip, spi, enc)
-            self.script += "ip xfrm policy add src %s dst %s dir in tmpl proto esp spi %s\n" \
+            self.script += "ip xfrm policy add src %s dst %s dir in tmpl proto esp spi 0x%s\n" \
                            % (remote_server['ip'], self.inner_ip, spi)
             self.script += "\n"
         open(self.output, "w").write(self.script)
