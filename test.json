@@ -1,7 +1,7 @@
 {
   "nodes": {
     "0": {
-      "name": "pku-atom",
+      "name": "pku-ato",
       "address": {
         "v4": {
           "public_ip": "222.29.47.158",
@@ -24,7 +24,7 @@
       }
     },
     "1": {
-      "name": "pku-office",
+      "name": "pku-off",
       "address": {
         "v6": {
           "public_ip": "2001:da8:201:1243::100",
@@ -40,7 +40,7 @@
       }
     },
     "2": {
-      "name": "aliyun-bj",
+      "name": "aly-bj",
       "address": {
         "v4": {
           "public_ip": "123.56.158.109",
@@ -56,7 +56,7 @@
       }
     },
     "3": {
-      "name": "pku-universe",
+      "name": "pku-uni",
       "address": {
         "v4": {
           "public_ip": "222.29.47.162",

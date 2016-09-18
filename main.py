@@ -85,12 +85,12 @@ class IPsec:
                 local = self.self.address[info[1]]
                 remote = self.nodes[info[2]].address[info[3]]
                 mode = info[4]
-                name = "%s.%s.%s" % (self.nodes[info[2]].name, info[3], mode)
+                name = "%s.%s" % (self.nodes[info[2]].name, info[3])
             elif info[2] == self.id:
                 local = self.self.address[info[3]]
                 remote = self.nodes[info[0]].address[info[1]]
                 mode = info[4]
-                name = "%s.%s.%s" % (self.nodes[info[0]].name, info[1], mode)
+                name = "%s.%s" % (self.nodes[info[0]].name, info[1])
             else:
                 continue
 
@@ -120,14 +120,14 @@ class IPsec:
                 dev = self.self.route[k]
                 info = dev.split(".")
                 gateway = self.nodes[info[0]].address[info[1]]['inner_ip']
-                name = "%s.%s.%s" % (self.nodes[info[0]].name, info[1], info[2])
+                name = "%s.%s" % (self.nodes[info[0]].name, info[1])
                 for address in v.network:
                     self.script += "ip route add %s dev %s via %s table 1000\n" % (address, name, gateway)
             elif "default" in self.self.route:
                 dev = self.self.route["default"]
                 info = dev.split(".")
                 gateway = self.nodes[info[0]].address[info[1]]['inner_ip']
-                name = "%s.%s.%s" % (self.nodes[info[0]].name, info[1], info[2])
+                name = "%s.%s" % (self.nodes[info[0]].name, info[1])
                 for address in v.network:
                     self.script += "ip route add %s dev %s via %s table 1000\n" % (address, name, gateway)
 
