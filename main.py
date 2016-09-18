@@ -14,22 +14,26 @@ class Node:
 class IPsec:
     def __init__(self, args):
         self.file = open(args.json, "r")
-        self.id = args.id
+        self.d = json.loads(self.file.read())
+        self.id = None  # args.id
         self.script = ""
         self.seed = args.seed
-        self.output = args.output
+        self.output = None  # args.output
         self.nodes = {}  # type: dict(str,Node)
         self.self = None  # type: Node
         self.tunnels = None
         self.ipsec = None
+        self.network = ""
+        self.route_tmp = []
 
     def load_file(self):
-        d = json.loads(self.file.read())
+        d = self.d
         self.self = Node(d['nodes'][self.id])
         for key, node in d['nodes'].items():
             self.nodes[key] = Node(node)
         self.tunnels = d['tunnel']
         self.ipsec = d['ipsec']
+        self.network = d['network']
 
     def _generate_sec_spi(self, ip):
         temp = str(ip) + str(self.seed)
@@ -112,7 +116,14 @@ class IPsec:
 
     def _generate_route(self):
         self.script += "\n#####ROUTE#####\n"
-        self.script += "ip rule add pref 1000 lookup 1000\n"
+        # self.script += "ip rule add pref 40000 lookup 1000\n"
+        # self.script += "ip route flush table 40000\n"
+        if "default" in self.self.route:
+            dev = self.self.route["default"]
+            info = dev.split(".")
+            gateway = self.nodes[info[0]].address[info[1]]['inner_ip']
+            name = "%s.%s" % (self.nodes[info[0]].name, info[1])
+            self.script += "ip route add %s dev %s via %s\n" % (self.network, name, gateway)
         for k, v in self.nodes.items():
             if k == self.id:
                 continue
@@ -122,14 +133,14 @@ class IPsec:
                 gateway = self.nodes[info[0]].address[info[1]]['inner_ip']
                 name = "%s.%s" % (self.nodes[info[0]].name, info[1])
                 for address in v.network:
-                    self.script += "ip route add %s dev %s via %s table 1000\n" % (address, name, gateway)
+                    self.script += "ip route add %s dev %s via %s\n" % (address, name, gateway)
             elif "default" in self.self.route:
                 dev = self.self.route["default"]
                 info = dev.split(".")
                 gateway = self.nodes[info[0]].address[info[1]]['inner_ip']
                 name = "%s.%s" % (self.nodes[info[0]].name, info[1])
                 for address in v.network:
-                    self.script += "ip route add %s dev %s via %s table 1000\n" % (address, name, gateway)
+                    self.script += "ip route add %s dev %s via %s\n" % (address, name, gateway)
 
     def generate_script(self):
         self.script += "#!/bin/bash\n"
@@ -138,15 +149,26 @@ class IPsec:
         self._generate_route()
         open(self.output, "w").write(self.script)
 
+    def generate_all(self):
+        d = self.d
+        for k, v in d['nodes'].items():
+            self.id = k
+            self.script = ""
+            self.route_tmp = []
+            self.output = "%s.sh" % v["name"]
+            self.load_file()
+            self.generate_script()
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Generate Ipsec Setup Script")
     parser.add_argument("-j", "--json", help="Describe Json File.")
-    parser.add_argument("-i", "--id", help="Server Id.")
+    # parser.add_argument("-i", "--id", help="Server Id.")
     parser.add_argument("-s", "--seed", default="0", help="Encrypt Secret Seed.")
-    parser.add_argument("-o", "--output", default="output.sh", help="Output Bash Script.")
+    # parser.add_argument("-o", "--output", default="output.sh", help="Output Bash Script.")
     args = parser.parse_args()
 
     ip_sec = IPsec(args)
-    ip_sec.load_file()
-    ip_sec.generate_script()
+    ip_sec.generate_all()
+    # ip_sec.load_file()
+    # ip_sec.generate_script()
