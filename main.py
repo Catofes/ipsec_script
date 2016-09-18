@@ -3,31 +3,33 @@ import json
 import hashlib
 
 
+class Node:
+    def __init__(self, rvalue):
+        self.name = rvalue['name']
+        self.address = rvalue['address']
+        self.network = rvalue['network']
+        self.route = rvalue['route']
+
+
 class IPsec:
     def __init__(self, args):
         self.file = open(args.json, "r")
         self.id = args.id
-        self.connections = []
-        self.servers = None
-        self.outer_ip = ""
-        self.inner_ip = ""
         self.script = ""
         self.seed = args.seed
         self.output = args.output
+        self.nodes = {}  # type: dict(str,Node)
+        self.self = None  # type: Node
+        self.tunnels = None
+        self.ipsec = None
 
     def load_file(self):
         d = json.loads(self.file.read())
-        self.servers = d['servers']
-        self.outer_ip = self.servers[self.id]['ip']
-        if 'inner' in self.servers[self.id].keys():
-            self.inner_ip = self.servers[self.id]['inner']
-        else:
-            self.inner_ip = self.outer_ip
-        for ele in d['connections']:
-            if self.id == str(ele[0]):
-                self.connections.append(str(ele[1]))
-            if self.id == str(ele[1]):
-                self.connections.append(str(ele[0]))
+        self.self = Node(d['nodes'][self.id])
+        for key, node in d['nodes'].items():
+            self.nodes[key] = Node(node)
+        self.tunnels = d['tunnel']
+        self.ipsec = d['ipsec']
 
     def _generate_sec_spi(self, ip):
         temp = str(ip) + str(self.seed)
@@ -37,25 +39,103 @@ class IPsec:
         spi = temp[8:16]
         return enc, spi
 
+    def _generate_ipsec(self):
+        self.script += "\n#####IPSEC#####\n"
+        self.script += "#Self\n"
+        for k, v in self.self.address.items():
+            ip = v['public_ip']
+            if 'local_ip' in v:
+                ip = v['local_ip']
+            enc, spi = self._generate_sec_spi(ip)
+            self.script += "ip xfrm state add dst %s proto esp spi 0x%s enc blowfish 0x%s\n" \
+                           % (ip, spi, enc)
+        self.script += "\n"
+        for con in self.ipsec:
+            info = con.split(".")
+            if info[0] == self.id:
+                local = self.self.address[info[1]]
+                remote = self.nodes[info[2]].address[info[3]]
+            elif info[2] == self.id:
+                local = self.self.address[info[3]]
+                remote = self.nodes[info[0]].address[info[1]]
+            else:
+                continue
+
+            self.script += "#%s\n" % con
+            remote_address = remote['public_ip']
+            local_address = local['public_ip']
+            if 'local_ip' in local:
+                local_address = local['local_ip']
+
+            enc, spi = self._generate_sec_spi(remote_address)
+            self.script += "ip xfrm state add src %s dst %s proto esp spi 0x%s enc blowfish 0x%s\n" \
+                           % (local_address, remote_address, spi, enc)
+            self.script += "ip xfrm policy add src %s dst %s dir out tmpl proto esp spi 0x%s\n" \
+                           % (local_address, remote_address, spi)
+            enc, spi = self._generate_sec_spi(local['public_ip'])
+            self.script += "ip xfrm policy add src %s dst %s dir in tmpl proto esp spi 0x%s\n" \
+                           % (remote_address, local_address, spi)
+            self.script += "\n"
+
+    def _generate_tunnel(self):
+        self.script += "\n#####TUNNEL#####\n"
+        for con in self.tunnels:
+            info = con.split(".")
+            if info[0] == self.id:
+                local = self.self.address[info[1]]
+                remote = self.nodes[info[2]].address[info[3]]
+                mode = info[4]
+                name = "%s.%s.%s" % (self.nodes[info[2]].name, info[3], mode)
+            elif info[2] == self.id:
+                local = self.self.address[info[3]]
+                remote = self.nodes[info[0]].address[info[1]]
+                mode = info[4]
+                name = "%s.%s.%s" % (self.nodes[info[0]].name, info[1], mode)
+            else:
+                continue
+
+            self.script += "#%s\n" % con
+            remote_ip = remote['public_ip']
+            remote_inner_ip = remote['inner_ip']
+            local_ip = local['public_ip']
+            local_inner_ip = local['inner_ip']
+            if 'local_ip' in local:
+                local_ip = local['local_ip']
+
+            if mode in ["ip6ip6", "ipip6", "ip6gre", "vti6"]:
+                self.script += "ip -6 tunnel add %s mode %s local %s remote %s\n" % (name, mode, local_ip, remote_ip)
+            else:
+                self.script += "ip tunnel add %s mode %s local %s remote %s\n" % (name, mode, local_ip, remote_ip)
+            self.script += "ip addr add %s peer %s dev %s\n" % (local_inner_ip, remote_inner_ip, name)
+            self.script += "ip link set %s up\n" % name
+            self.script += "\n"
+
+    def _generate_route(self):
+        self.script += "\n#####ROUTE#####\n"
+        self.script += "ip rule add pref 1000 lookup 1000\n"
+        for k, v in self.nodes.items():
+            if k == self.id:
+                continue
+            if k in self.self.route:
+                dev = self.self.route[k]
+                info = dev.split(".")
+                gateway = self.nodes[info[0]].address[info[1]]['inner_ip']
+                name = "%s.%s.%s" % (self.nodes[info[0]].name, info[1], info[2])
+                for address in v.network:
+                    self.script += "ip route add %s dev %s via %s table 1000\n" % (address, name, gateway)
+            elif "default" in self.self.route:
+                dev = self.self.route["default"]
+                info = dev.split(".")
+                gateway = self.nodes[info[0]].address[info[1]]['inner_ip']
+                name = "%s.%s.%s" % (self.nodes[info[0]].name, info[1], info[2])
+                for address in v.network:
+                    self.script += "ip route add %s dev %s via %s table 1000\n" % (address, name, gateway)
+
     def generate_script(self):
         self.script += "#!/bin/bash\n"
-        enc, spi = self._generate_sec_spi(self.outer_ip)
-        self.script += "#Self\n"
-        self.script += "ip xfrm state add dst %s proto esp spi 0x%s enc blowfish 0x%s\n" \
-                       % (self.inner_ip, spi, enc)
-        self.script += "\n"
-        for con in self.connections:
-            self.script += "#%s\n" % con
-            remote_server = self.servers[con]
-            enc, spi = self._generate_sec_spi(remote_server['ip'])
-            self.script += "ip xfrm state add src %s dst %s proto esp spi 0x%s enc blowfish 0x%s\n" \
-                           % (self.inner_ip, remote_server['ip'], spi, enc)
-            self.script += "ip xfrm policy add src %s dst %s dir out tmpl proto esp spi 0x%s\n" \
-                           % (self.inner_ip, remote_server['ip'], spi)
-            enc, spi = self._generate_sec_spi(self.outer_ip)
-            self.script += "ip xfrm policy add src %s dst %s dir in tmpl proto esp spi 0x%s\n" \
-                           % (remote_server['ip'], self.inner_ip, spi)
-            self.script += "\n"
+        self._generate_ipsec()
+        self._generate_tunnel()
+        self._generate_route()
         open(self.output, "w").write(self.script)
 
 
