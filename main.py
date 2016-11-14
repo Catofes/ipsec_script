@@ -50,7 +50,7 @@ class IPsec:
             ip = v['public_ip']
             if 'local_ip' in v:
                 ip = v['local_ip']
-            enc, spi = self._generate_sec_spi(ip)
+            enc, spi = self._generate_sec_spi(v['public_ip'])
             self.script += "ip xfrm state add dst %s proto esp spi 0x%s enc blowfish 0x%s\n" \
                            % (ip, spi, enc)
         self.script += "\n"
