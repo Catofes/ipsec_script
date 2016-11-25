@@ -39,6 +39,7 @@ class IPsec:
 
     def generate_script(self):
         self.script += "#!/bin/bash\n"
+        self.script += "ip xfrm state flush\nip xfrm policy flush\n"
         enc, spi = self._generate_sec_spi(self.outer_ip)
         self.script += "#Self\n"
         self.script += "ip xfrm state add dst %s proto esp spi 0x%s enc blowfish 0x%s\n" \
