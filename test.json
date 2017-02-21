@@ -57,6 +57,25 @@
         "default": "0.v4.gre"
       }
     },
+    "3": {
+      "name": "pku-hep",
+      "address": {
+        "v4": {
+          "public_ip": "162.105.151.74",
+          "inner_ip": "10.16.4.1"
+        },
+        "v6": {
+          "public_ip": "2001:da8:201:1151::100",
+          "inner_ip": "10.16.4.2"
+        }
+      },
+      "network": [
+        "10.16.4.0/24"
+      ],
+      "route": {
+        "default": "0.v6.ip6gre"
+      }
+    },
     "6": {
       "name": "ln-jp",
       "address": {
@@ -159,6 +178,7 @@
   "tunnel": [
     "0.v6.1.v6.ip6gre",
     "0.v4.2.v4.gre",
+    "0.v6.3.v6.ip6gre",
     "0.v4.6.v4.gre",
     "0.v6.6.v6.ip6gre",
     "0.v4.7.v4.gre",
